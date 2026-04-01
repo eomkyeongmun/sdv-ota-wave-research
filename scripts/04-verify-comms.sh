@@ -116,7 +116,7 @@ echo "--- Test 5: Envoy sidecar injection ---"
 for svc in auth campaign package deploy; do
   pod=$(get_pod "${svc}")
   container_count=$(kubectl get pod -n "${NAMESPACE}" "${pod}" \
-    -o jsonpath='{.spec.containers[*].name}' | tr ' ' '\n' | wc -l)
+    -o jsonpath='{range .spec.containers[*]}{.name}{"\n"}{end}' | grep -c '.')
   if [ "${container_count}" -ge 2 ]; then
     echo "  [PASS] ${svc} pod has ${container_count} containers (istio-proxy injected)"
     PASS=$((PASS+1))
