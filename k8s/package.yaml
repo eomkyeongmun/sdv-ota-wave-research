@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: package
+  namespace: ota-pipeline
+  labels:
+    app: package
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: package
+  template:
+    metadata:
+      labels:
+        app: package
+        version: v1
+    spec:
+      containers:
+        - name: package
+          image: python:3.11-slim
+          command: ["python", "/app/app.py"]
+          env:
+            - name: SERVICE_NAME
+              value: "package"
+            - name: NEXT_SERVICE
+              value: "deploy:8080"
+            - name: PORT
+              value: "8080"
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: app-code
+              mountPath: /app
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+      volumes:
+        - name: app-code
+          configMap:
+            name: ota-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: package
+  namespace: ota-pipeline
+  labels:
+    app: package
+spec:
+  selector:
+    app: package
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http

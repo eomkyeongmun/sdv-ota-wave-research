@@ -1,0 +1,11 @@
+# Week 1: PERMISSIVE mode — allows both plain-text and mTLS traffic.
+# This lets kubectl exec + curl tests work without client certs.
+# In Week 5 this will be tightened to STRICT.
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: ota-pipeline
+spec:
+  mtls:
+    mode: PERMISSIVE
