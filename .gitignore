@@ -1,5 +1,6 @@
 # Istio binary (downloaded by 02-install-istio.sh)
 istioctl
+istioctl.exe
 istio-*/
 
 # Experiment logs and outputs
