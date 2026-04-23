@@ -1,0 +1,72 @@
+# Week 5: Least-privilege AuthorizationPolicy
+# L7 SA-based microsegmentation (requires STRICT mTLS + per-service SA)
+#
+# Chain: auth-sa -> campaign-sa -> package-sa -> deploy-sa
+# Attacker (default SA) can reach auth only, not campaign/package/deploy directly.
+
+# ── auth: allow from load-gen / measurement pods (default SA) ─────────
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-auth-from-any
+  namespace: ota-pipeline
+spec:
+  selector:
+    matchLabels:
+      app: auth
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["ota-pipeline"]
+---
+# ── campaign: only from auth-sa ───────────────────────────────────────
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-campaign-from-auth-sa
+  namespace: ota-pipeline
+spec:
+  selector:
+    matchLabels:
+      app: campaign
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/ota-pipeline/sa/auth-sa"
+---
+# ── package: only from campaign-sa ────────────────────────────────────
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-package-from-campaign-sa
+  namespace: ota-pipeline
+spec:
+  selector:
+    matchLabels:
+      app: package
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/ota-pipeline/sa/campaign-sa"
+---
+# ── deploy: only from package-sa ──────────────────────────────────────
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-deploy-from-package-sa
+  namespace: ota-pipeline
+spec:
+  selector:
+    matchLabels:
+      app: deploy
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/ota-pipeline/sa/package-sa"

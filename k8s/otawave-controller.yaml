@@ -1,0 +1,253 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hstp-controller-code
+  namespace: ota-pipeline
+data:
+  controller.py: |
+    #!/usr/bin/env python3
+    """
+    HSTP Controller - Hierarchical Safe Transition Protocol
+    Watches OTAWave CRs and enforces safe activation/deactivation order.
+
+    Condition gates (deactivation):
+      1. drain  - wait drainSeconds for in-flight requests to complete
+      2. scale  - scale deployment to 0
+      3. policy - apply DENY AuthorizationPolicy (belt-and-suspenders)
+
+    Condition gates (activation):
+      1. policy - remove any existing DENY policy
+      2. scale  - scale deployment to 1
+      3. ready  - wait for pod Ready AND 2/2 containers (app + istio-proxy)
+    """
+
+    import kubernetes
+    import time
+    import logging
+    from datetime import datetime, timezone
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s"
+    )
+    log = logging.getLogger("hstp")
+
+    NAMESPACE       = "ota-pipeline"
+    ENVOY_SYNC_SEC  = 5   # seconds to wait for AP to propagate to Envoy proxies
+    POLL_INTERVAL   = 5   # seconds between CRD polling cycles
+
+    # ── Kubernetes clients ──────────────────────────────────────────────
+    kubernetes.config.load_incluster_config()
+    apps_v1    = kubernetes.client.AppsV1Api()
+    core_v1    = kubernetes.client.CoreV1Api()
+    custom_api = kubernetes.client.CustomObjectsApi()
+
+    # ── Helpers ─────────────────────────────────────────────────────────
+    def update_status(name, phase, step, message):
+        body = {"status": {
+            "phase":       phase,
+            "currentStep": step,
+            "message":     message,
+            "lastUpdated": datetime.now(timezone.utc).isoformat()
+        }}
+        try:
+            custom_api.patch_namespaced_custom_object_status(
+                group="ota.research", version="v1",
+                namespace=NAMESPACE, plural="otawaves",
+                name=name, body=body
+            )
+        except Exception as e:
+            log.warning(f"status update failed for {name}: {e}")
+
+    def scale(service, replicas):
+        apps_v1.patch_namespaced_deployment(
+            name=service, namespace=NAMESPACE,
+            body={"spec": {"replicas": replicas}}
+        )
+        log.info(f"  [scale] {service} -> {replicas} replicas")
+
+    def wait_ready(service, timeout=120):
+        """Wait until all pods are Running with 2/2 containers ready."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                dep = apps_v1.read_namespaced_deployment(
+                    name=service, namespace=NAMESPACE)
+                desired = dep.spec.replicas or 0
+                ready   = dep.status.ready_replicas or 0
+                if desired > 0 and ready == desired:
+                    pods = core_v1.list_namespaced_pod(
+                        namespace=NAMESPACE,
+                        label_selector=f"app={service}"
+                    )
+                    all_ok = True
+                    for pod in pods.items:
+                        statuses = pod.status.container_statuses or []
+                        ready_cnt = sum(1 for cs in statuses if cs.ready)
+                        if ready_cnt < 2:   # app + istio-proxy
+                            all_ok = False
+                            break
+                    if all_ok and pods.items:
+                        log.info(f"  [ready] {service}: {ready}/{desired} pods, 2/2 containers")
+                        return True
+            except Exception as e:
+                log.warning(f"  [ready] check error for {service}: {e}")
+            time.sleep(3)
+        log.error(f"  [ready] TIMEOUT waiting for {service}")
+        return False
+
+    def apply_deny_policy(service):
+        policy = {
+            "apiVersion": "security.istio.io/v1beta1",
+            "kind": "AuthorizationPolicy",
+            "metadata": {"name": f"hstp-deny-{service}", "namespace": NAMESPACE},
+            "spec": {
+                "selector": {"matchLabels": {"app": service}},
+                "action": "DENY",
+                "rules": [{"from": [{"source": {"principals": ["*"]}}]}]
+            }
+        }
+        try:
+            custom_api.create_namespaced_custom_object(
+                group="security.istio.io", version="v1beta1",
+                namespace=NAMESPACE, plural="authorizationpolicies", body=policy
+            )
+            log.info(f"  [policy] DENY applied for {service}")
+        except kubernetes.client.exceptions.ApiException as e:
+            if e.status == 409:
+                custom_api.patch_namespaced_custom_object(
+                    group="security.istio.io", version="v1beta1",
+                    namespace=NAMESPACE, plural="authorizationpolicies",
+                    name=f"hstp-deny-{service}", body=policy
+                )
+                log.info(f"  [policy] DENY updated for {service}")
+            else:
+                raise
+
+    def remove_deny_policy(service):
+        try:
+            custom_api.delete_namespaced_custom_object(
+                group="security.istio.io", version="v1beta1",
+                namespace=NAMESPACE, plural="authorizationpolicies",
+                name=f"hstp-deny-{service}"
+            )
+            log.info(f"  [policy] DENY removed for {service}")
+        except Exception:
+            pass   # OK if not exists
+
+    # ── Wave processing ─────────────────────────────────────────────────
+    def process_wave(wave):
+        name   = wave["metadata"]["name"]
+        spec   = wave["spec"]
+        status = wave.get("status") or {}
+        phase  = status.get("phase", "Pending")
+
+        if phase in ("Completed", "Failed"):
+            return
+
+        action     = spec["action"]
+        order      = spec["order"]
+        drain_sec  = spec.get("drainSeconds", 10)
+
+        log.info(f"Wave '{name}': action={action} order={order}")
+        update_status(name, "Running", 0, f"Starting {action}")
+
+        try:
+            for i, service in enumerate(order):
+                step = i + 1
+                log.info(f"Step {step}/{len(order)}: {action} '{service}'")
+                update_status(name, "Running", step, f"{action} {service}")
+
+                if action == "deactivate":
+                    # Gate 1: drain
+                    log.info(f"  [gate-drain] draining {service} for {drain_sec}s")
+                    time.sleep(drain_sec)
+                    # Gate 2: scale down
+                    scale(service, 0)
+                    time.sleep(2)
+                    # Gate 3: deny policy + wait for Envoy sync
+                    apply_deny_policy(service)
+                    log.info(f"  [gate-sync] waiting {ENVOY_SYNC_SEC}s for Envoy AP sync")
+                    time.sleep(ENVOY_SYNC_SEC)
+
+                elif action == "activate":
+                    # Gate 1: remove deny policy first
+                    remove_deny_policy(service)
+                    log.info(f"  [gate-sync] waiting {ENVOY_SYNC_SEC}s for policy removal sync")
+                    time.sleep(ENVOY_SYNC_SEC)
+                    # Gate 2: scale up
+                    scale(service, 1)
+                    # Gate 3: readiness + Envoy init
+                    ok = wait_ready(service, timeout=120)
+                    if not ok:
+                        raise RuntimeError(f"{service} readiness timeout")
+
+            update_status(name, "Completed", len(order),
+                          f"{action} completed at {datetime.now(timezone.utc).isoformat()}")
+            log.info(f"Wave '{name}' COMPLETED.")
+
+        except Exception as exc:
+            log.error(f"Wave '{name}' FAILED: {exc}")
+            update_status(name, "Failed", 0, str(exc))
+
+    # ── Main loop ───────────────────────────────────────────────────────
+    def main():
+        log.info("HSTP Controller started. Polling for OTAWave CRs...")
+        while True:
+            try:
+                waves = custom_api.list_namespaced_custom_object(
+                    group="ota.research", version="v1",
+                    namespace=NAMESPACE, plural="otawaves"
+                )
+                for wave in waves.get("items", []):
+                    process_wave(wave)
+            except Exception as e:
+                log.error(f"Poll error: {e}")
+            time.sleep(POLL_INTERVAL)
+
+    if __name__ == "__main__":
+        main()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hstp-controller
+  namespace: ota-pipeline
+  labels:
+    app: hstp-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hstp-controller
+  template:
+    metadata:
+      labels:
+        app: hstp-controller
+      annotations:
+        sidecar.istio.io/inject: "false"   # controller 자체는 Envoy 불필요
+    spec:
+      serviceAccountName: hstp-controller
+      containers:
+        - name: controller
+          image: python:3.11-slim
+          command:
+            - /bin/sh
+            - -c
+            - |
+              pip install kubernetes --quiet &&
+              python /app/controller.py
+          volumeMounts:
+            - name: code
+              mountPath: /app
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+      volumes:
+        - name: code
+          configMap:
+            name: hstp-controller-code

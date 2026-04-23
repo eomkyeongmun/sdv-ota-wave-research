@@ -1,0 +1,112 @@
+# Week 5: Least-privilege NetworkPolicy
+# L4 microsegmentation: enforce auth->campaign->package->deploy chain
+
+# ── auth: allow from any pod in ota-pipeline (entry point) ────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-auth-ingress
+  namespace: ota-pipeline
+spec:
+  podSelector:
+    matchLabels:
+      app: auth
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ota-pipeline
+      ports:
+        - port: 8080
+    # Istio control plane
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+---
+# ── campaign: only from auth pod ──────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-campaign-from-auth
+  namespace: ota-pipeline
+spec:
+  podSelector:
+    matchLabels:
+      app: campaign
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: auth
+      ports:
+        - port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+---
+# ── package: only from campaign pod ───────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-package-from-campaign
+  namespace: ota-pipeline
+spec:
+  podSelector:
+    matchLabels:
+      app: package
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: campaign
+      ports:
+        - port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+---
+# ── deploy: only from package pod ─────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-deploy-from-package
+  namespace: ota-pipeline
+spec:
+  podSelector:
+    matchLabels:
+      app: deploy
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: package
+      ports:
+        - port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+---
+# ── egress: allow all (services need to call downstream) ──────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-all
+  namespace: ota-pipeline
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - {}

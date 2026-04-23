@@ -1,0 +1,50 @@
+﻿% SDV OTA Wave Transition ??Paper Tables
+% Generated: 2026-04-23 15:00
+
+% Table 1: Three-Scenario Comparison
+\begin{table}[ht]
+\centering
+\caption{Three-Scenario Comparison: D2 Worst-Case Deactivation}
+\label{tab:comparison}
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Scenario} & \textbf{Sec. Hole (s)} & \textbf{Atk Win (s)} & \textbf{Lat. Block (\%)} & \textbf{Req. Succ (\%)} & \textbf{Risk Win (s)} \\
+\midrule
+No-Policy       & 53.3 & 53.3 & 25 & 0 & -- \\
+HSTP only       & 0             & 0             & 85.7       & 85.7       & 66 \\
+HSTP+Microseg   & 0             & 0             & 100       & 85.7       & 66 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% Table 2: Microsegmentation Verification
+\begin{table}[ht]
+\centering
+\caption{Week 5 Microsegmentation Verification Results}
+\label{tab:microseg}
+\begin{tabular}{lll}
+\toprule
+\textbf{Test} & \textbf{Result} & \textbf{Details} \\
+\midrule
+Pipeline chain (auth/call) & \fail & depth=4/4 \\
+Same-NS lateral block      & 3/4 & auth=entry point (allowed) \\
+Cross-NS block             & 4/4 & HTTP 000 (NetworkPolicy drop) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% Table 3: Baseline Lateral Movement (Week 3)
+\begin{table}[ht]
+\centering
+\caption{Baseline Lateral Movement: No Policy (Week 3)}
+\label{tab:baseline}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Metric} & \textbf{Same-NS} & \textbf{Cross-NS} \\
+\midrule
+Total probes    & 12 & 4 \\
+Accessible      & 12 & 4 \\
+Block rate (\%) & 0 & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,12 @@
+# Week 5: STRICT mTLS
+# PERMISSIVE(Week 1) -> STRICT(Week 5)
+# Plain-text HTTP traffic is now rejected by Envoy.
+# Cross-namespace attackers without Istio sidecar are blocked at L4.
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: ota-pipeline
+spec:
+  mtls:
+    mode: STRICT

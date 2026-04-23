@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hstp-controller
+  namespace: ota-pipeline
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hstp-controller-role
+rules:
+  # OTAWave CRD
+  - apiGroups: ["ota.research"]
+    resources: ["otawaves", "otawaves/status"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  # Deployments (scale up/down)
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch", "update"]
+  # Pods (readiness / envoy init check)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  # Istio AuthorizationPolicy
+  - apiGroups: ["security.istio.io"]
+    resources: ["authorizationpolicies"]
+    verbs: ["get", "list", "create", "patch", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: hstp-controller-binding
+subjects:
+  - kind: ServiceAccount
+    name: hstp-controller
+    namespace: ota-pipeline
+roleRef:
+  kind: ClusterRole
+  name: hstp-controller-role
+  apiGroup: rbac.authorization.k8s.io
