@@ -144,7 +144,7 @@ function Run-Scenario {
 
     # 요약 CSV 행
     $row = "$Name,$secHoleSec,$attackWindowSec,$blockRate,$successRate,$riskWindow,$latBlocked,$latTotal,$reqSuccess,$reqTotal"
-    Add-Content -Path $SUMMARY_CSV -Value $row -Encoding UTF8
+    Add-Content -Path $script:SUMMARY_CSV -Value $row -Encoding UTF8
 
     Write-Host ""
     Write-Host "  Result: hole=${secHoleSec}s  block=${blockRate}%  success=${successRate}%" -ForegroundColor Yellow

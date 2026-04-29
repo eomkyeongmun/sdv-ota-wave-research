@@ -1,5 +1,5 @@
 ﻿# SDV OTA Wave Transition Security ??Experiment Results
-Generated: 2026-04-23 15:00
+Generated: 2026-04-29 14:51
 
 ---
 
@@ -49,8 +49,8 @@ with drain gate (8s per step).
 
 | Metric | Value |
 |---|---|
-| Total requests during transition | 27 |
-| Successful requests | 20 (74.1%) |
+| Total requests during transition | 33 |
+| Successful requests | 26 (78.8%) |
 | Security hole duration | 0s |
 | Transition duration | s |
 | Pipeline DENY policy applied | Yes (post-drain) |
@@ -83,8 +83,8 @@ Worst-case: D2 deactivation (auth-first order).
 | Scenario | Security Hole (s) | Lateral Block% | Req Success% | Risk Window (s) |
 |---|---|---|---|---|
 | No-Policy (baseline) | 53.3 | 25% | 0% | N/A |
-| HSTP only | 0 | 85.7% | 85.7% | 66 |
-| HSTP + Microseg | 0 | 100% | 85.7% | 66 |
+| HSTP only | 0 | 78.3% | 82.6% | 65 |
+| HSTP + Microseg | 0 | 100% | 86.4% | 63 |
 
 ### Key Findings
 
@@ -109,9 +109,9 @@ Worst-case: D2 deactivation (auth-first order).
 |---|---|---|---|
 | Security Hole Duration (s) | 53.3 | 0 | 0 |
 | Attack Window (s) | 53.3 | 0 | 0 |
-| Lateral Block Rate (%) | 25 | 85.7 | 100 |
-| Request Success Rate (%) | 0 | 85.7 | 85.7 |
-| Transition Risk Window (s) | N/A | 66 | 66 |
+| Lateral Block Rate (%) | 25 | 78.3 | 100 |
+| Request Success Rate (%) | 0 | 82.6 | 86.4 |
+| Transition Risk Window (s) | N/A | 65 | 63 |
 
 ---
 
