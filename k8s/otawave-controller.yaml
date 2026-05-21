@@ -33,7 +33,10 @@ data:
     log = logging.getLogger("hstp")
 
     NAMESPACE       = "ota-pipeline"
-    ENVOY_SYNC_SEC  = 5   # seconds to wait for AP to propagate to Envoy proxies
+    # Conservative time-based gate: measured Envoy AP propagation = 51.12 +/- 0.18s (N=5).
+    # We wait 60s = 51s observed worst case + ~9s safety margin.
+    # NOTE: this is a heuristic wait, not an active sync check via Envoy /config_dump.
+    ENVOY_SYNC_SEC  = 60  # seconds to wait for AP to propagate to Envoy proxies
     POLL_INTERVAL   = 5   # seconds between CRD polling cycles
 
     # ── Kubernetes clients ──────────────────────────────────────────────

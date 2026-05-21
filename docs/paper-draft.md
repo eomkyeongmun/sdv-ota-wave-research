@@ -222,8 +222,10 @@ policy sync 대기 (60초)
 1. drain gate     — 8초 대기 (in-flight 요청 완료)
 2. scale down     — replicas: 0
 3. DENY policy    — AuthorizationPolicy DENY 적용
-4. Envoy sync     — 60초 대기 (정책 전파 확인)
+4. Envoy sync     — 60초 대기 (정책 전파 시간 기반 보수적 게이트)
 ```
+
+Envoy sync 단계는 실측한 worst-case 전파 시간 51.12 ± 0.18초(N=5)에 약 9초의 안전 마진을 더한 **시간 기반 휴리스틱**이다. Envoy `/config_dump` 또는 istiod push status를 능동적으로 폴링하는 방식은 본 연구의 후속 작업으로 둔다.
 
 ---
 
@@ -277,4 +279,3 @@ No-Policy 상태에서 D2 비활성화 시 요청 성공률은 0%(서비스 체�
 
 *실험 로그: `logs/` 디렉토리 참조*
 *통계 결과: `logs/kci-stats-*.csv` 참조*
-*보고서: `docs/paper-results.md` 참조*

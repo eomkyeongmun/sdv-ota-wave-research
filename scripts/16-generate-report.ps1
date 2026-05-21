@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
     Week 7 - Generate Paper Report
-    모든 실험 CSV에서 논문용 Markdown + LaTeX 표 생성
-    Output: docs/paper-results.md, docs/paper-tables.tex
+    모든 실험 CSV에서 논문용 LaTeX 표 생성
+    Output: docs/paper-tables.tex
 #>
 
 $ErrorActionPreference = "Continue"
@@ -80,141 +80,7 @@ $h3Block = if ($hstpMicrosegRow) { $hstpMicrosegRow.lateral_block_rate_pct    } 
 $h3Succ  = if ($hstpMicrosegRow) { $hstpMicrosegRow.request_success_rate_pct  } else { "N/A" }
 $h3Risk  = if ($hstpMicrosegRow) { $hstpMicrosegRow.transition_risk_window_sec } else { "N/A" }
 
-# ── Markdown 보고서 ───────────────────────────────────────────────────
 $TIMESTAMP = Get-Date -Format "yyyy-MM-dd HH:mm"
-$md = @"
-# SDV OTA Wave Transition Security — Experiment Results
-Generated: $TIMESTAMP
-
----
-
-## 1. Threat Model
-
-An attacker has code execution inside one pod in `ota-pipeline` namespace,
-but has no Kubernetes admin or host-level privilege.
-The pipeline chain: `auth -> campaign -> package -> deploy`.
-
----
-
-## 2. Week 3 — Baseline: No-Policy Lateral Movement
-
-Without NetworkPolicy or AuthorizationPolicy, any pod can reach any service.
-
-| Metric | Value |
-|---|---|
-| Total access attempts | $baseTotal |
-| Successful (HTTP 200) | $baseSuccess / $baseTotal |
-| Cross-namespace access | $baseCrossOk / $baseCrossTotal (from default NS) |
-| Lateral block rate | 0% |
-
-**Finding:** All 16 endpoint probes succeeded. Cross-namespace pods from `default` NS
-could reach all 4 services freely. Zero lateral movement resistance.
-
----
-
-## 3. Week 3 — Lateral Movement During D2 Deactivation
-
-Attacker probing during unsafe (D2: auth-first) deactivation sequence.
-
-| Metric | Value |
-|---|---|
-| Total probes during transition | $transTotal |
-| Successful probes | $transSuccess ($transSuccPct%) |
-| Security hole duration | ~53s (auth removed first, downstream still exposed) |
-
-**Finding:** After auth is removed, campaign/package/deploy remain reachable with
-no authentication gateway. Attacker exploits the security hole window.
-
----
-
-## 4. Week 4 — HSTP Safe Deactivation
-
-Hierarchical Safe Transition Protocol: deploy -> package -> campaign -> auth order,
-with drain gate (8s per step).
-
-| Metric | Value |
-|---|---|
-| Total requests during transition | $hstpTotal |
-| Successful requests | $hstpOk ($hstpSuccPct%) |
-| Security hole duration | 0s |
-| Transition duration | ${hstpMaxElapsed}s |
-| Pipeline DENY policy applied | Yes (post-drain) |
-
-**Finding:** Safe order eliminates the security hole. Pipeline availability is maintained
-during the drain window. DENY policies applied after each service drains.
-
----
-
-## 5. Week 5 — Microsegmentation Verification
-
-Per-service ServiceAccounts + NetworkPolicy chain + AuthorizationPolicy SA-principals
-+ STRICT mTLS.
-
-| Test | Result |
-|---|---|
-| Pipeline chain (auth/call depth=4) | $(if ($chainOk -gt 0) { "PASS" } else { "FAIL" }) |
-| Same-NS lateral move blocked | $sameBlocked / $sameTotal |
-| Cross-NS access blocked | $crossBlocked / $crossTotal |
-
-**Finding:** Microsegmentation enforces strict least-privilege. Same-NS attacker blocked
-from campaign/package/deploy (auth is the allowed entry point). Cross-NS completely blocked.
-
----
-
-## 6. Week 6 — Three-Scenario Comparison
-
-Worst-case: D2 deactivation (auth-first order).
-
-| Scenario | Security Hole (s) | Lateral Block% | Req Success% | Risk Window (s) |
-|---|---|---|---|---|
-| No-Policy (baseline) | $noPolicyHole | $noPolicyBlock% | $noPolicySucc% | N/A |
-| HSTP only | 0 | $h2Block% | $h2Succ% | $h2Risk |
-| HSTP + Microseg | 0 | $h3Block% | $h3Succ% | $h3Risk |
-
-### Key Findings
-
-1. **Security Hole Elimination**: HSTP reduces security hole from 53.3s to 0s by enforcing
-   safe deactivation order (downstream-first drain).
-
-2. **Lateral Movement Blocking**: Microsegmentation raises lateral block rate from 85.7%
-   (HSTP only) to 100% (HSTP + microseg), closing the residual SA-level attack surface.
-
-3. **Availability Preservation**: Both HSTP variants maintain ~85.7% request success rate
-   during transition, demonstrating that safety and availability are not mutually exclusive.
-
-4. **Defense-in-Depth**: The combination of external transition control (OTAWave CRD/controller)
-   and internal microsegmentation (NetworkPolicy + AuthorizationPolicy + STRICT mTLS) provides
-   layered protection against both transition-time race conditions and lateral movement.
-
----
-
-## 7. Summary Metrics Table (Paper)
-
-| Metric | No-Policy | HSTP Only | HSTP + Microseg |
-|---|---|---|---|
-| Security Hole Duration (s) | $noPolicyHole | 0 | 0 |
-| Attack Window (s) | $noPolicyHole | 0 | 0 |
-| Lateral Block Rate (%) | $noPolicyBlock | $h2Block | $h3Block |
-| Request Success Rate (%) | $noPolicySucc | $h2Succ | $h3Succ |
-| Transition Risk Window (s) | N/A | $h2Risk | $h3Risk |
-
----
-
-## 8. Experimental Setup
-
-- **Platform**: Kubernetes v1.30.0 (Kind: 1 control-plane + 2 workers)
-- **Service Mesh**: Istio 1.21.2 (sidecar injection, STRICT mTLS)
-- **Services**: Python 3.11-slim, 4 dummy microservices (auth/campaign/package/deploy)
-- **Threat**: Attacker pod in ota-pipeline NS, no K8s admin privileges
-- **Deactivation scenario tested**: D2 (unsafe order: auth-first)
-- **Safe order (HSTP)**: deploy -> package -> campaign -> auth, drainSeconds=8
-
----
-"@
-
-$mdPath = Join-Path $DOCS_DIR "paper-results.md"
-Set-Content -Path $mdPath -Value $md -Encoding UTF8
-Write-Host "[OK] Markdown report: $mdPath" -ForegroundColor Green
 
 # ── LaTeX 표 ──────────────────────────────────────────────────────────
 $tex = @"
@@ -287,7 +153,6 @@ Write-Host ("  {0,-30} {1,10} {2,10} {3,10}" -f "Lateral Block (%)",     "$noPol
 Write-Host ("  {0,-30} {1,10} {2,10} {3,10}" -f "Request Success (%)",   "$noPolicySucc%", "$h2Succ%", "$h3Succ%") -ForegroundColor White
 Write-Host ("  {0,-30} {1,10} {2,10} {3,10}" -f "Risk Window (s)",       "N/A", $h2Risk, $h3Risk)     -ForegroundColor White
 Write-Host ""
-Write-Host "  docs/paper-results.md   -> Markdown report"
 Write-Host "  docs/paper-tables.tex   -> LaTeX tables"
 Write-Host "=================================================" -ForegroundColor Cyan
 Write-Host ""

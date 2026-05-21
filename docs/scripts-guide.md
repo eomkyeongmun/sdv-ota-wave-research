@@ -144,8 +144,8 @@ cd scripts
 
 ### `16-generate-report.ps1`
 - **역할**: 논문용 보고서 자동 생성
-- **내용**: 모든 최신 CSV를 읽어 `docs/paper-results.md`(Markdown)와 `docs/paper-tables.tex`(LaTeX) 생성
-- **출력**: `docs/paper-results.md`, `docs/paper-tables.tex`
+- **내용**: 모든 최신 CSV를 읽어 `docs/paper-tables.tex`(LaTeX) 생성
+- **출력**: `docs/paper-tables.tex`
 
 ### `17-security-hole-matrix.ps1`
 - **역할**: D1/D2/D3 보안 홀 지속 시간 측정
